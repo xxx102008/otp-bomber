@@ -1,6 +1,193 @@
-# רשימת אתרים לסריקה. אתר בכל שורה.
-# שורות שמתחילות ב-# מתעלמים מהן.
+# ============================================================
+#  OTP BOMBER - site list
+#  One site per line. Lines starting with # are ignored.
+#
+#  Format:
+#     domain.com                                 <- tool hunts the endpoint
+#     domain.com|/api/auth/send-otp              <- exact endpoint
+#     domain.com|/api/auth/otp|phone|json        <- + field + style
+#
+#  The tool TESTS every line on startup and keeps only the live ones.
+#  Dead lines cost you nothing but a second. Add as many as you want.
+# ============================================================
 
-# דוגמאות - מחק ותוסיף משלך:
-example.com
+# ---------------- GLOBAL / RIDE & DELIVERY ----------------
+uber.com
+bolt.eu
+careem.com
+grab.com
+gojek.com
+foodpanda.com
+talabat.com
+deliveroo.com
+glovo.com
 wolt.com
+doordash.com
+just-eat.com
+zomato.com
+swiggy.com
+blinkit.com
+zepto.com
+dunzo.com
+licious.com
+bigbasket.com
+ubereats.com
+
+# ---------------- GLOBAL / SHOPPING ----------------
+amazon.com
+ebay.com
+aliexpress.com
+noon.com
+namshi.com
+daraz.pk
+lazada.com
+shopee.com
+tokopedia.com
+zalando.com
+asos.com
+hm.com
+zara.com
+uniqlo.com
+nike.com
+adidas.com
+decathlon.com
+ikea.com
+carrefour.com
+tesco.com
+walmart.com
+target.com
+flipkart.com
+myntra.com
+ajio.com
+nykaa.com
+meesho.com
+snapdeal.com
+tatacliq.com
+lenskart.com
+firstcry.com
+
+# ---------------- GLOBAL / TRAVEL ----------------
+booking.com
+agoda.com
+oyo.com
+makemytrip.com
+goibibo.com
+yatra.com
+redbus.in
+ixigo.com
+airbnb.com
+expedia.com
+hotels.com
+kayak.com
+skyscanner.net
+kiwi.com
+cleartrip.com
+easemytrip.com
+abhibus.com
+
+# ---------------- GLOBAL / MONEY ----------------
+paytm.com
+phonepe.com
+mobikwik.com
+freecharge.in
+cred.club
+groww.in
+zerodha.com
+upstox.com
+angelone.in
+revolut.com
+n26.com
+wise.com
+klarna.com
+paypal.com
+skrill.com
+neteller.com
+binance.com
+coinbase.com
+kraken.com
+etoro.com
+bitpanda.com
+
+# ---------------- GLOBAL / APPS ----------------
+spotify.com
+deezer.com
+soundcloud.com
+canva.com
+notion.so
+figma.com
+discord.com
+slack.com
+telegram.org
+viber.com
+linkedin.com
+twitter.com
+reddit.com
+quora.com
+medium.com
+udemy.com
+coursera.org
+duolingo.com
+strava.com
+fitbit.com
+
+# ---------------- INDIA ----------------
+olacabs.com
+rapido.bike
+porter.in
+bluedart.com
+delhivery.com
+shiprocket.in
+practo.com
+pharmeasy.in
+netmeds.com
+tata1mg.com
+cult.fit
+healthifyme.com
+dream11.com
+mpl.live
+winzo.com
+sharechat.com
+dailyhunt.in
+inshorts.com
+bewakoof.com
+urbancompany.com
+zoomcar.com
+jio.com
+airtel.in
+vodafone.in
+bsnl.co.in
+
+# ---------------- MIDDLE EAST / TURKEY ----------------
+getir.com
+trendyol.com
+hepsiburada.com
+n11.com
+yemeksepeti.com
+banabi.com
+aramisauto.com
+sahibinden.com
+noon.com
+careem.com
+otlob.com
+talabat.com
+namshi.com
+mumzworld.com
+
+# ---------------- EUROPE ----------------
+otto.de
+bol.com
+allegro.pl
+alza.cz
+zalando.de
+emag.ro
+cdiscount.com
+fnac.com
+elcorteingles.es
+lidl.com
+aldi.com
+action.com
+jumbo.com
+picnic.app
+flink.com
+gorillas.io
+getir.com
