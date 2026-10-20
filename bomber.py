@@ -35,7 +35,7 @@ WORKERS       = 80
 ROUND_SECONDS = 30
 TIMEOUT       = 10
 COUNTRY_CODE  = "972"
-PROBE_LIMIT   = 14
+PROBE_LIMIT   = 40
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
