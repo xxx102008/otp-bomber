@@ -113,23 +113,34 @@ def main():
     if TARGET.startswith("http"):
         urls = [TARGET]
     else:
-        d = TARGET.strip().rstrip("/")
-        urls = ["https://" + d + p for p in PATHS]
+        d = TARGET.strip().rstrip("/").replace("https://", "").replace("http://", "")
+        if d.startswith(("www.", "api.")):
+            hosts = [d]
+        else:
+            hosts = [d, "www." + d, "api." + d]
+        urls = ["https://" + h + p for h in hosts for p in PATHS]
 
     print("בודק %d כתובות עם %s ...\n" % (len(urls), NUMBER))
     with ThreadPoolExecutor(max_workers=THREADS) as ex:
         out = list(ex.map(hit, urls))
 
     order = {"REAL": 0, "CAPTCHA": 1, "EXISTS": 2, "THROTTLED": 3, "DEAD": 4}
-    out.sort(key=lambda x: order.get(x[1], 9))
+    out.sort(key=lambda x: (order.get(x[1], 9), x[0]))
 
+    shown = 0
     for url, tag, why in out:
         if tag == "DEAD":
             continue
-        print("  %-9s %-52s %s" % ("[" + tag + "]", url, why))
+        print("  %-9s %-58s %s" % ("[" + tag + "]", url, why))
+        shown += 1
+
+    if shown == 0:
+        print("  --- אין שום תגובה מעניינת. הנה דוגמאות למה שכן חזר: ---")
+        for url, tag, why in out[:8]:
+            print("  [DEAD] %-58s %s" % (url, why))
 
     reals = [u for u, t, w in out if t == "REAL"]
-    print("\n" + "=" * 56)
+    print("\n" + "=" * 58)
     if reals:
         print("  %d כתובות שכנראה באמת שולחות SMS:" % len(reals))
         for u in reals:
