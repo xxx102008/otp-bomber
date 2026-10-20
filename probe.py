@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-probe.py - בודק דומיין או כתובת אחת, ומדפיס רק מה שבאמת עובד.
+probe.py v2 - מאתר כתובות OTP אמיתיות.
+מסנן אתרי catch-all על ידי השוואה לכתובת דמה.
 
 שימוש:
     python probe.py shufersal.co.il
     python probe.py shufersal.co.il 972501234567
-    python probe.py https://api.apteka.ru/api/auth/send-otp
 """
 
 import re
@@ -65,7 +65,15 @@ def hdr(url):
     }
 
 
-def classify(r):
+def fetch(url):
+    try:
+        return requests.post(url, data='{"phone":"%s"}' % NUMBER,
+                             headers=hdr(url), timeout=TIMEOUT)
+    except Exception:
+        return None
+
+
+def classify(r, base):
     if r is None:
         return ("DEAD", "לא מגיב")
     c = r.status_code
@@ -76,32 +84,39 @@ def classify(r):
     if c in (404, 405, 410):
         return ("DEAD", "HTTP %d" % c)
     if c == 429:
-        return ("THROTTLED", "429 - נחסמת, כנראה אנטי-בוט")
+        return ("THROTTLED", "429 - אנטי-בוט")
+
+    # ---- ההשוואה החשובה: זהה לדף הדמה? ----
+    if base is not None and base.status_code == c:
+        b = base.text or ""
+        if abs(len(body) - len(b)) < 40 and body[:150] == b[:150]:
+            return ("SAME", "זהה לדף דמה: " + body[:45].replace("\n", " "))
+
     if "captcha" in low or "recaptcha" in low:
         return ("CAPTCHA", "דורש קפצ'ה")
     if c in (400, 401, 403, 422):
         return ("EXISTS", "HTTP %d - הנתיב קיים" % c)
+    if c != 200:
+        return ("DEAD", "HTTP %d" % c)
+
+    if "json" in ct:
+        if any(x in low for x in BAD):
+            return ("EXISTS", "JSON שגיאה: " + body[:60].replace("\n", " "))
+        return ("REAL", "JSON חיובי: " + body[:60].replace("\n", " "))
+
     if "html" in ct and len(body) > 1500:
-        return ("DEAD", "החזיר את דף הבית (catch-all)")
-    if c == 200:
-        if "json" in ct:
-            if any(b in low for b in BAD):
-                return ("EXISTS", "JSON עם שגיאה: " + body[:60].replace("\n", " "))
-            return ("REAL", "JSON חיובי: " + body[:60].replace("\n", " "))
-        if any(w in low for w in OTP_WORDS):
-            return ("REAL", "טקסט עם מילות קוד")
-        return ("EXISTS", "200 אבל לא ברור")
-    return ("DEAD", "HTTP %d" % c)
+        return ("HTML", "דף HTML גדול: " + body[:45].replace("\n", " "))
+
+    if any(w in low for w in OTP_WORDS):
+        return ("REAL", "טקסט עם מילות קוד: " + body[:60].replace("\n", " "))
+
+    return ("EXISTS", "200 לא ברור: " + body[:60].replace("\n", " "))
 
 
-def hit(url):
+def hit(url, base):
     for attempt in range(3):
-        try:
-            r = requests.post(url, data='{"phone":"%s"}' % NUMBER,
-                              headers=hdr(url), timeout=TIMEOUT)
-        except Exception as e:
-            return (url, "DEAD", str(e)[:60])
-        tag, why = classify(r)
+        r = fetch(url)
+        tag, why = classify(r, base)
         if tag == "THROTTLED" and attempt < 2:
             time.sleep(3)
             continue
@@ -111,43 +126,51 @@ def hit(url):
 
 def main():
     if TARGET.startswith("http"):
-        urls = [TARGET]
+        hosts = [re.match(r"https?://[^/]+", TARGET).group(0)]
+        pairs = [(TARGET, hosts[0])]
     else:
         d = TARGET.strip().rstrip("/").replace("https://", "").replace("http://", "")
-        if d.startswith(("www.", "api.")):
-            hosts = [d]
-        else:
-            hosts = [d, "www." + d, "api." + d]
-        urls = ["https://" + h + p for h in hosts for p in PATHS]
+        hosts = [d] if d.startswith(("www.", "api.")) else [d, "www." + d, "api." + d]
+        pairs = [("https://" + h + p, h) for h in hosts for p in PATHS]
 
-    print("בודק %d כתובות עם %s ...\n" % (len(urls), NUMBER))
+    print("בודק %d כתובות עם %s ...\n" % (len(pairs), NUMBER))
+
+    bases = {}
+    for h in hosts:
+        bases[h] = fetch("https://" + h + "/api/__nope__xyz")
+
     with ThreadPoolExecutor(max_workers=THREADS) as ex:
-        out = list(ex.map(hit, urls))
+        out = list(ex.map(lambda pu: hit(pu[0], bases.get(pu[1])), pairs))
 
-    order = {"REAL": 0, "CAPTCHA": 1, "EXISTS": 2, "THROTTLED": 3, "DEAD": 4}
+    order = {"REAL": 0, "CAPTCHA": 1, "EXISTS": 2, "THROTTLED": 3,
+             "HTML": 4, "SAME": 5, "DEAD": 6}
     out.sort(key=lambda x: (order.get(x[1], 9), x[0]))
 
-    shown = 0
+    printed = {}
     for url, tag, why in out:
         if tag == "DEAD":
             continue
-        print("  %-9s %-58s %s" % ("[" + tag + "]", url, why))
-        shown += 1
+        printed[tag] = printed.get(tag, 0) + 1
+        if tag in ("SAME", "HTML") and printed[tag] > 4:
+            continue
+        print("  %-9s %-56s %s" % ("[" + tag + "]", url, why))
 
-    if shown == 0:
-        print("  --- אין שום תגובה מעניינת. הנה דוגמאות למה שכן חזר: ---")
-        for url, tag, why in out[:8]:
-            print("  [DEAD] %-58s %s" % (url, why))
+    print("\n" + "-" * 58)
+    for tag in ("REAL", "EXISTS", "CAPTCHA", "THROTTLED", "HTML", "SAME"):
+        if printed.get(tag):
+            print("  %-10s %d" % (tag, printed[tag]))
 
     reals = [u for u, t, w in out if t == "REAL"]
     print("\n" + "=" * 58)
     if reals:
-        print("  %d כתובות שכנראה באמת שולחות SMS:" % len(reals))
+        print("  %d כתובות REAL:" % len(reals))
         for u in reals:
             print("  " + u + '|POST|{"phone":"{phone}"}')
-        print("\n  ==> תוסיף אותן ל-sites.txt ותבדוק את הטלפון עכשיו.")
     else:
-        print("  אין REAL. תסתכל על CAPTCHA / EXISTS למעלה.")
+        print("  אין REAL.")
+        if printed.get("SAME"):
+            print("  רוב התשובות זהות לדף הדמה -> האתר מגיש דף אחד לכל נתיב.")
+            print("  במקרה כזה צריך F12.")
 
 
 if __name__ == "__main__":
