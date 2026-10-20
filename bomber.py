@@ -201,26 +201,34 @@ def fire(ep, phone):
 
 
 def verdict(r):
-    """live = really sent | maybe = endpoint exists | dead = nothing there"""
+    """live = באמת שלח | maybe = הנתיב קיים | dead = כלום"""
     if r is None:
         return "dead"
     c = r.status_code
-    if c in (404, 410):
+    if c in (404, 405, 410):
         return "dead"
-    if c == 429:
-        return "live"
-    if not (200 <= c < 300):
-        return "maybe"
-
     ct = (r.headers.get("content-type") or "").lower()
-    body = (r.text or "")[:4000].lower()
+    body = (r.text or "")
+    low = body.lower()
+
+    if c == 429:
+        return "throttled"
+    if "captcha" in low or "recaptcha" in low:
+        return "maybe"
+    if c in (400, 401, 403, 422):
+        return "maybe"
+    if not (200 <= c < 300):
+        return "dead"
+
+    # דף HTML גדול = דף הבית. כמעט תמיד לא API אמיתי.
+    if "html" in ct and len(body) > 1500:
+        return "dead"
 
     if "json" in ct:
-        return "maybe" if any(b in body for b in BAD_WORDS) else "live"
-
-    if any(w in body for w in OTP_WORDS):
-        return "maybe"
-    return "dead"
+        return "maybe" if any(b in low for b in BAD_WORDS) else "live"
+    if any(w in low for w in OTP_WORDS):
+        return "live"
+    return "maybe"
 
 
 # ----------------- discovery -----------------
@@ -234,12 +242,16 @@ def discover(entries):
 
     def check(ep):
         for ph in phones:
-            r = fire(ep, ph)
-            v = verdict(r)
-            if v == "live":
-                return ("LIVE", ep, ph)
-            if v == "maybe":
-                near.append((ep, ph))
+            for attempt in range(3):
+                v = verdict(fire(ep, ph))
+                if v == "throttled" and attempt < 2:
+                    time.sleep(3)
+                    continue
+                if v == "live":
+                    return ("LIVE", ep, ph)
+                if v == "maybe":
+                    near.append((ep, ph))
+                break
         return ("DEAD", ep, phones[0])
 
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
