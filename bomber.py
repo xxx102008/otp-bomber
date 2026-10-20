@@ -61,7 +61,7 @@ PROBE_PATHS = [
     "/api/auth/send-otp", "/api/auth/otp", "/api/send-otp", "/api/otp/send",
     "/api/v1/auth/otp", "/api/v1/send-otp", "/api/v1/auth/send-otp",
     "/api/v2/auth/otp", "/auth/send-otp", "/auth/otp", "/send-otp",
-    "/otp/send", "/api/send-code", "/api/user/send-otp",
+    "/otp/send", "/api/send-code", "/api/user/send-otp", "https://api.bnl.co.il/v1/login/forgot-password",
     # --- v1 family ---
     "/api/v1/otp/send", "/api/v1/sms/send", "/api/v1/user/send-otp",
     "/api/v1/phone/send-code", "/api/v1/auth/sms", "/api/v1/auth/send-code",
