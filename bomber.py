@@ -56,6 +56,17 @@ PROBE_PATHS = [
     "/api/v1/auth/otp", "/api/v1/send-otp", "/api/v1/auth/send-otp",
     "/api/v2/auth/otp", "/auth/send-otp", "/auth/otp", "/send-otp",
     "/otp/send", "/api/send-code", "/api/user/send-otp",
+    # --- v1 family ---
+    "/api/v1/otp/send", "/api/v1/sms/send", "/api/v1/user/send-otp",
+    "/api/v1/phone/send-code", "/api/v1/auth/sms", "/api/v1/auth/send-code",
+    "/api/v1/user/otp", "/api/v1/verify/send",
+    # --- v2 family ---
+    "/api/v2/otp/send", "/api/v2/auth/sms", "/api/v2/sms/send",
+    "/api/v2/send-otp", "/api/v2/user/send-otp",
+    # --- without the /api prefix ---
+    "/user/send-otp", "/auth/phone/send", "/auth/sms", "/sms/send",
+    "/api/sms/send", "/api/auth/sms", "/api/auth/send-code",
+    "/api/user/send-code", "/api/phone/send-code", "/api/verify/send",
 ]
 
 BAD_WORDS = ('"error"', '"success":false', '"status":false', '"ok":false',
