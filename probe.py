@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-probe.py v2 - מאתר כתובות OTP אמיתיות.
-מסנן אתרי catch-all על ידי השוואה לכתובת דמה.
-
-שימוש:
-    python probe.py shufersal.co.il
-    python probe.py shufersal.co.il 972501234567
+probe.py - מאתר כתובות OTP אמיתיות. מסנן catch-all דרך השוואה לכתובת דמה.
+שימוש:  python probe.py shufersal.co.il [מספר]
 """
 
 import re
@@ -86,7 +82,6 @@ def classify(r, base):
     if c == 429:
         return ("THROTTLED", "429 - אנטי-בוט")
 
-    # ---- ההשוואה החשובה: זהה לדף הדמה? ----
     if base is not None and base.status_code == c:
         b = base.text or ""
         if abs(len(body) - len(b)) < 40 and body[:150] == b[:150]:
