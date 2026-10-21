@@ -41,6 +41,7 @@ ROUND_SECONDS = 30
 TIMEOUT       = 10
 COUNTRY_CODE  = "972"
 PROBE_LIMIT   = 40      # must be >= len(PROBE_PATHS)
+LOCAL_PHONE   = ""      # ממולא אוטומטית בזמן ריצה
 COOLDOWN      = 1.0     # seconds between two requests to the SAME endpoint
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
